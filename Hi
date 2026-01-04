@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Mobile Plane Shooter</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #000;
+            overflow: hidden; /* Prevent scrolling */
+            touch-action: none; /* Stop default browser touch actions */
+        }
+        canvas {
+            display: block;
+            background-color: #111;
+            margin: auto;
+        }
+        #scoreDisplay {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            font-family: sans-serif;
+            font-size: 20px;
+            z-index: 10;
+        }
+        #gameOverScreen {
+            display: none;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            text-align: center;
+            font-family: sans-serif;
+            z-index: 20;
+        }
+        #restartBtn {
+            margin-top: 20px;
+            padding: 10px 20px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            font-size: 18px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="scoreDisplay">Score: 0</div>
+    <div id="gameOverScreen">
+        <h1>GAME OVER</h1>
+        <p id="finalScore">Score: 0</p>
+        <button id="restartBtn">Tap to Restart</button>
+    </div>
+    <canvas id="gameCanvas"></canvas>
+
+<script>
+    // --- Setup ---
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const scoreDisplay = document.getElementById('scoreDisplay');
+    const gameOverScreen = document.getElementById('gameOverScreen');
+    const finalScoreDisplay = document.getElementById('finalScore');
+    const restartBtn = document.getElementById('restartBtn');
+
+    // Set canvas size to fit mobile screen
+    function resizeCanvas() {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+    }
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+
+    // --- Game Variables ---
+    let score = 0;
+    let isGameOver = false;
+    let frameCount = 0;
+
+    // --- Game Objects ---
+
+    const player = {
+        x: canvas.width / 2,
+        y: canvas.height - 60,
+        width: 50,
+        height: 40,
+        color: '#00FF00', // Green
+        draw: function() {
+            ctx.fillStyle = this.color;
+            // Draw a simple triangle shape
+            ctx.beginPath();
+            ctx.moveTo(this.x, this.y);
+            ctx.lineTo(this.x - this.width / 2, this.y + this.height);
+            ctx.lineTo(this.x + this.width / 2, this.y + this.height);
+            ctx.closePath();
+            ctx.fill();
+        }
+    };
+
+    let bullets = [];
+    class Bullet {
+        constructor(x, y) {
+            this.x = x;
+            this.y = y;
+            this.width = 8;
+            this.height = 15;
+            this.color = '#FFFF00'; // Yellow
+            this.speed = 10;
+        }
+        update() {
+            this.y -= this.speed;
+        }
+        draw() {
+            ctx.fillStyle = this.color;
+            ctx.fillRect(this.x - this.width/2, this.y, this.width, this.height);
+        }
+    }
+
+    let enemies = [];
+    class Enemy {
+        constructor() {
+            this.width = 40;
+            this.height = 40;
+            this.x = Math.random() * (canvas.width - this.width);
+            this.y = -this.height;
+            this.color = '#FF0000'; // Red
+            this.speed = Math.random() * 3 + 2;
+        }
+        update() {
+            this.y += this.speed;
+        }
+        draw() {
+            ctx.fillStyle = this.color;
+            ctx.fillRect(this.x, this.y, this.width, this.height);
+        }
+    }
+
+    // --- Touch Controls ---
+    // Move player horizontally where the user touches
+    canvas.addEventListener('touchmove', function(e) {
+        // Prevent default scrolling behavior
+        e.preventDefault(); 
+        const touch = e.touches[0];
+        const rect = canvas.getBoundingClientRect();
+        // Center player on finger horizontally
+        player.x = touch.clientX - rect.left; 
+
+        // Keep player within screen bounds
+        if(player.x < player.width/2) player.x = player.width/2;
+        if(player.x > canvas.width - player.width/2) player.x = canvas.width - player.width/2;
+    }, { passive: false });
+
+    // --- Game Logic ---
+
+    function shoot() {
+        bullets.push(new Bullet(player.x, player.y));
+    }
+
+    function spawnEnemy() {
+        // Spawn an enemy every 60 frames (approx 1 second)
+        if (frameCount % 60 === 0) {
+            enemies.push(new Enemy());
+        }
+    }
+
+    // Simple AABB collision detection (Axis-Aligned Bounding Box)
+    function checkCollision(rect1, rect2) {
+        return (
+            rect1.x < rect2.x + rect2.width &&
+            rect1.x + rect1.width > rect2.x &&
+            rect1.y < rect2.y + rect2.height &&
+            rect1.y + rect1.height > rect2.y
+        );
+    }
+
+    function update() {
+        if (isGameOver) return;
+
+        frameCount++;
+
+        // Auto-shoot every 15 frames
+        if (frameCount % 15 === 0) {
+            shoot();
+        }
+
+        spawnEnemy();
+
+        // Update Bullets
+        for (let i = bullets.length - 1; i >= 0; i--) {
+            bullets[i].update();
+            // Remove off-screen bullets
+            if (bullets[i].y + bullets[i].height < 0) {
+                bullets.splice(i, 1);
+            }
+        }
+
+        // Update Enemies
+        for (let i = enemies.length - 1; i >= 0; i--) {
+            enemies[i].update();
+
+            // Check collision with Player (Game Over)
+            // Define hitbox for player (triangle approximation)
+            let playerHitbox = {x: player.x - player.width/2, y: player.y, width: player.width, height: player.height};
+            if (checkCollision(playerHitbox, enemies[i])) {
+                endGame();
+            }
+
+            // Check collision with Bullets
+            for (let j = bullets.length - 1; j >= 0; j--) {
+                if (bullets[j] && checkCollision(bullets[j], enemies[i])) {
+                    // Collision happened
+                    bullets.splice(j, 1); // Remove bullet
+                    enemies.splice(i, 1); // Remove enemy
+                    score += 10;
+                    scoreDisplay.innerText = "Score: " + score;
+                    // Enemy removed, break inner loop to avoid error
+                    break; 
+                }
+            }
+
+             // Remove off-screen enemies (bottom)
+             if (enemies[i] && enemies[i].y > canvas.height) {
+                enemies.splice(i, 1);
+            }
+        }
+    }
+
+    function draw() {
+        // Clear screen
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // Draw objects
+        player.draw();
+        bullets.forEach(bullet => bullet.draw());
+        enemies.forEach(enemy => enemy.draw());
+    }
+
+    function gameLoop() {
+        update();
+        draw();
+        if (!isGameOver) {
+            requestAnimationFrame(gameLoop);
+        }
+    }
+
+    function endGame() {
+        isGameOver = true;
+        gameOverScreen.style.display = 'block';
+        finalScoreDisplay.innerText = "Score: " + score;
+    }
+
+    function resetGame() {
+        isGameOver = false;
+        score = 0;
+        frameCount = 0;
+        bullets = [];
+        enemies = [];
+        player.x = canvas.width / 2;
+        scoreDisplay.innerText = "Score: 0";
+        gameOverScreen.style.display = 'none';
+        resizeCanvas(); // Ensure size is correct on restart
+        gameLoop();
+    }
+
+    // Restart Button Listener
+    restartBtn.addEventListener('click', resetGame);
+    // Also restart on touch if game over
+    restartBtn.addEventListener('touchstart', resetGame);
+
+
+    // Start the game
+    gameLoop();
+
+</script>
+</body>
+</html>
